@@ -4,7 +4,7 @@ A Game Boy emulator that runs in the browser, written in TypeScript.
 
 Live: https://tomasjank.github.io/dotmatrix/
 
-<!-- screenshot at docs/screenshot.png, added after the first manual run -->
+![2048 homebrew running in dotmatrix](docs/screenshot.png)
 
 ## Controls
 
