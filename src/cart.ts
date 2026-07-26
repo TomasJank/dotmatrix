@@ -10,6 +10,6 @@ export class Cart {
   }
 
   read(addr: number): number {
-    return this.rom[addr]
+    return this.rom[addr] ?? 0xFF
   }
 }
