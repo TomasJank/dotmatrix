@@ -11,8 +11,8 @@ function makeBus() {
 
 describe('bus', () => {
   it('reads ROM through cart', () => expect(makeBus().read(0x1234)).toBe(0xAB))
-  it('rejects banked carts', () => {
-    const rom = new Uint8Array(0x8000); rom[0x147] = 0x01
+  it('rejects carts that need real bank switching', () => {
+    const rom = new Uint8Array(0x10000); rom[0x147] = 0x01
     expect(() => new Cart(rom)).toThrow(/unsupported cart type/)
   })
   it('WRAM roundtrip and echo', () => {
