@@ -50,4 +50,14 @@ describe('ppu', () => {
     bus.write(0xFF46, 0xC0)
     expect(bus.oam[0]).toBe(0xAB)
   })
+  it('renders line 0 after LCD off then on again', () => {
+    const { bus, ppu } = setup()
+    for (let i = 0; i < 16; i++) bus.vram[i] = 0xFF   // tile 0 = all color 3
+    ppu.tick(100)
+    bus.write(0xFF40, 0x00)  // LCD off
+    bus.write(0xFF40, 0x91)  // LCD on again
+    ppu.tick(456)             // render line 0
+    const [r, g, b, a] = ppu.framebuffer.slice(0, 4)
+    expect([r, g, b, a]).toEqual([8, 24, 32, 255])
+  })
 })

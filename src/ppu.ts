@@ -54,6 +54,11 @@ export class PPU {
       this.mode = MODE_HBLANK
       this.lineCycles = 0
       this.windowLine = 0
+    } else if ((v & 0x80) && !wasOn) {
+      this.ly = 0
+      this.mode = MODE_OAM
+      this.lineCycles = 0
+      this.windowLine = 0
     }
   }
 
