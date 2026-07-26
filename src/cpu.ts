@@ -19,10 +19,10 @@ const CYCLES = new Uint8Array([
   4, 4, 4, 4, 4, 4, 8, 4, 4, 4, 4, 4, 4, 4, 8, 4, // 0x9_
   4, 4, 4, 4, 4, 4, 8, 4, 4, 4, 4, 4, 4, 4, 8, 4, // 0xA_
   4, 4, 4, 4, 4, 4, 8, 4, 4, 4, 4, 4, 4, 4, 8, 4, // 0xB_
-  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // 0xC_ (task 4)
-  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // 0xD_ (task 4)
-  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // 0xE_ (task 4)
-  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // 0xF_ (task 4)
+  8,12,12,16,12,16, 8,16, 8,16,12, 4,12,24, 8,16, // 0xC_ (cc entries hold not-taken cost, overridden in switch)
+  8,12,12, 0,12,16, 8,16, 8,16,12, 0,12, 0, 8,16, // 0xD_
+ 12,12, 8, 0, 0,16, 8,16,16, 4,16, 0, 0, 0, 8,16, // 0xE_
+ 12,12, 8, 4, 0,16, 8,16,12, 8,16, 4, 0, 0, 8,16, // 0xF_
 ])
 
 export class CPU {
@@ -37,6 +37,7 @@ export class CPU {
   sp = 0xFFFE
   pc = 0x0100
   ime = false
+  imeNext = false
   halted = false
 
   constructor(public bus: Bus) {}
@@ -210,6 +211,89 @@ export class CPU {
     return 12
   }
 
+  private push16(v: number) {
+    this.sp = (this.sp - 1) & 0xFFFF
+    this.bus.write(this.sp, (v >> 8) & 0xFF)
+    this.sp = (this.sp - 1) & 0xFFFF
+    this.bus.write(this.sp, v & 0xFF)
+  }
+  private pop16(): number {
+    const lo = this.bus.read(this.sp)
+    this.sp = (this.sp + 1) & 0xFFFF
+    const hi = this.bus.read(this.sp)
+    this.sp = (this.sp + 1) & 0xFFFF
+    return (hi << 8) | lo
+  }
+
+  private retCond(cond: boolean): number {
+    if (!cond) return 8
+    this.pc = this.pop16()
+    return 20
+  }
+  private jpCond(cond: boolean): number {
+    const addr = this.fetch16()
+    if (!cond) return 12
+    this.pc = addr
+    return 16
+  }
+  private callCond(cond: boolean): number {
+    const addr = this.fetch16()
+    if (!cond) return 12
+    this.push16(this.pc)
+    this.pc = addr
+    return 24
+  }
+  private rst(addr: number) {
+    this.push16(this.pc)
+    this.pc = addr
+  }
+
+  // ADD SP,d8 and LD HL,SP+d8 share this: flags come from the *unsigned* low-byte add.
+  private spPlusD8(): number {
+    const raw = this.fetch8()
+    const signed = raw > 0x7F ? raw - 0x100 : raw
+    const sp = this.sp
+    this.f = 0
+    if (((sp & 0xF) + (raw & 0xF)) > 0xF) this.f |= HC
+    if (((sp & 0xFF) + (raw & 0xFF)) > 0xFF) this.f |= CY
+    return (sp + signed) & 0xFFFF
+  }
+
+  private cbRotFlags(r: number, carry: number) {
+    this.f = (r === 0 ? Z : 0) | (carry ? CY : 0)
+  }
+  private cbRot(op: number, v: number): number {
+    switch (op) {
+      case 0: { const carry = (v >> 7) & 1; const r = ((v << 1) | carry) & 0xFF; this.cbRotFlags(r, carry); return r } // RLC
+      case 1: { const carry = v & 1; const r = ((v >> 1) | (carry << 7)) & 0xFF; this.cbRotFlags(r, carry); return r } // RRC
+      case 2: { const cin = (this.f & CY) ? 1 : 0; const carry = (v >> 7) & 1; const r = ((v << 1) | cin) & 0xFF; this.cbRotFlags(r, carry); return r } // RL
+      case 3: { const cin = (this.f & CY) ? 1 : 0; const carry = v & 1; const r = ((v >> 1) | (cin << 7)) & 0xFF; this.cbRotFlags(r, carry); return r } // RR
+      case 4: { const carry = (v >> 7) & 1; const r = (v << 1) & 0xFF; this.cbRotFlags(r, carry); return r } // SLA
+      case 5: { const carry = v & 1; const r = ((v >> 1) | (v & 0x80)) & 0xFF; this.cbRotFlags(r, carry); return r } // SRA
+      case 6: { const r = ((v << 4) | (v >> 4)) & 0xFF; this.f = r === 0 ? Z : 0; return r } // SWAP
+      default: { const carry = v & 1; const r = (v >> 1) & 0xFF; this.cbRotFlags(r, carry); return r } // SRL
+    }
+  }
+
+  private execCB(): number {
+    const cb = this.fetch8()
+    const z = cb & 7
+    const y = (cb >> 3) & 7
+    const block = cb >> 6
+    const v = this.r8get(z)
+    if (block === 1) { // BIT
+      this.f = (this.f & CY) | HC
+      if (!(v & (1 << y))) this.f |= Z
+      return z === 6 ? 12 : 8
+    }
+    let r: number
+    if (block === 0) r = this.cbRot(y, v)
+    else if (block === 2) r = v & ~(1 << y) & 0xFF // RES
+    else r = v | (1 << y) // SET
+    this.r8set(z, r)
+    return z === 6 ? 16 : 8
+  }
+
   step(): number {
     const pc = this.pc
     const op = this.fetch8()
@@ -335,6 +419,69 @@ export class CPU {
       case 0x38: cycles = this.jr(!!(this.f & CY)); break
 
       case 0x10: this.fetch8(); break // STOP
+
+      case 0xC0: cycles = this.retCond(!(this.f & Z)); break
+      case 0xC8: cycles = this.retCond(!!(this.f & Z)); break
+      case 0xD0: cycles = this.retCond(!(this.f & CY)); break
+      case 0xD8: cycles = this.retCond(!!(this.f & CY)); break
+      case 0xC9: this.pc = this.pop16(); break
+      case 0xD9: this.pc = this.pop16(); this.ime = true; break // RETI
+
+      case 0xC2: cycles = this.jpCond(!(this.f & Z)); break
+      case 0xCA: cycles = this.jpCond(!!(this.f & Z)); break
+      case 0xD2: cycles = this.jpCond(!(this.f & CY)); break
+      case 0xDA: cycles = this.jpCond(!!(this.f & CY)); break
+      case 0xC3: this.pc = this.fetch16(); break
+      case 0xE9: this.pc = this.hl; break
+
+      case 0xC4: cycles = this.callCond(!(this.f & Z)); break
+      case 0xCC: cycles = this.callCond(!!(this.f & Z)); break
+      case 0xD4: cycles = this.callCond(!(this.f & CY)); break
+      case 0xDC: cycles = this.callCond(!!(this.f & CY)); break
+      case 0xCD: { const addr = this.fetch16(); this.push16(this.pc); this.pc = addr; break }
+
+      case 0xC7: this.rst(0x00); break
+      case 0xCF: this.rst(0x08); break
+      case 0xD7: this.rst(0x10); break
+      case 0xDF: this.rst(0x18); break
+      case 0xE7: this.rst(0x20); break
+      case 0xEF: this.rst(0x28); break
+      case 0xF7: this.rst(0x30); break
+      case 0xFF: this.rst(0x38); break
+
+      case 0xC5: this.push16(this.bc); break
+      case 0xD5: this.push16(this.de); break
+      case 0xE5: this.push16(this.hl); break
+      case 0xF5: this.push16((this.a << 8) | this.f); break
+      case 0xC1: this.bc = this.pop16(); break
+      case 0xD1: this.de = this.pop16(); break
+      case 0xE1: this.hl = this.pop16(); break
+      case 0xF1: { const v = this.pop16(); this.a = (v >> 8) & 0xFF; this.f = v & 0xF0; break }
+
+      case 0xC6: this.aluOp(0, this.fetch8()); break
+      case 0xCE: this.aluOp(1, this.fetch8()); break
+      case 0xD6: this.aluOp(2, this.fetch8()); break
+      case 0xDE: this.aluOp(3, this.fetch8()); break
+      case 0xE6: this.aluOp(4, this.fetch8()); break
+      case 0xEE: this.aluOp(5, this.fetch8()); break
+      case 0xF6: this.aluOp(6, this.fetch8()); break
+      case 0xFE: this.aluOp(7, this.fetch8()); break
+
+      case 0xE0: this.bus.write(0xFF00 + this.fetch8(), this.a); break // LDH (a8),A
+      case 0xF0: this.a = this.bus.read(0xFF00 + this.fetch8()); break // LDH A,(a8)
+      case 0xE2: this.bus.write(0xFF00 + this.c, this.a); break // LD (C),A
+      case 0xF2: this.a = this.bus.read(0xFF00 + this.c); break // LD A,(C)
+      case 0xEA: this.bus.write(this.fetch16(), this.a); break
+      case 0xFA: this.a = this.bus.read(this.fetch16()); break
+
+      case 0xE8: this.sp = this.spPlusD8(); break
+      case 0xF8: this.hl = this.spPlusD8(); break
+      case 0xF9: this.sp = this.hl; break
+
+      case 0xF3: this.ime = false; break // DI
+      case 0xFB: this.imeNext = true; break // EI
+
+      case 0xCB: cycles = this.execCB(); break
 
       default:
         throw new Error(`unimplemented opcode 0x${op.toString(16)} at 0x${pc.toString(16)}`)
