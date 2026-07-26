@@ -303,6 +303,7 @@ export class CPU {
     if (this.ime && pending) {
       const bit = pending & -pending
       this.ime = false
+      this.imeNext = false
       this.bus.if_ &= ~bit
       this.push16(this.pc)
       this.pc = CPU.VECTORS[bit]
@@ -319,18 +320,11 @@ export class CPU {
       const y = (op >> 3) & 7
       const z = op & 7
       this.r8set(y, this.r8get(z))
-      return cycles
-    }
-
-    if (op >= 0x80 && op <= 0xBF) {
+    } else if (op >= 0x80 && op <= 0xBF) {
       const y = (op >> 3) & 7
       const z = op & 7
       this.aluOp(y, this.r8get(z))
-      this.f &= 0xF0
-      return cycles
-    }
-
-    switch (op) {
+    } else switch (op) {
       case 0x00: break // NOP
       // ponytail: halt bug (IME=0, pending IRQ -> pc fails to advance on next fetch) skipped; add if a game depends on it
       case 0x76: this.halted = true; break // HALT

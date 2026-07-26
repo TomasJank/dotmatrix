@@ -29,6 +29,15 @@ describe('interrupts', () => {
     cpu.step() // now it fires
     expect(cpu.pc).toBe(0x0040)
   })
+  it('EI promotion is not skipped by the LD/ALU fast paths', () => {
+    const { bus, cpu } = setup([0xFB, 0x78, 0x00]) // EI; LD A,B; NOP
+    bus.ie = 0x01; bus.if_ = 0x01
+    cpu.step() // EI
+    cpu.step() // LD A,B — interrupt must NOT fire before this
+    expect(cpu.pc).toBe(0x0102)
+    cpu.step() // now it fires
+    expect(cpu.pc).toBe(0x0040)
+  })
   it('HALT wakes on pending interrupt even with ime off', () => {
     const { bus, cpu } = setup([0x76, 0x00]) // HALT; NOP
     cpu.step()
