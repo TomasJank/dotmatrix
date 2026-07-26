@@ -12,14 +12,39 @@ body {
 
 main {
   text-align: center;
-  max-width: 600px;
+  max-width: 480px;
+}
+
+h1 {
+  color: #9ccc65;
+  letter-spacing: 0.05em;
+}
+
+#hint {
+  color: #a0a0a0;
+  font-size: 0.9rem;
+}
+
+#hint label {
+  color: #9ccc65;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.bezel {
+  margin-top: 20px;
+  padding: 16px;
+  background: #24291f;
+  border: 1px solid #33421f;
+  border-radius: 16px;
 }
 
 canvas {
+  display: block;
   width: 480px;
   image-rendering: pixelated;
-  border: 2px solid #333;
-  margin-top: 20px;
+  border-radius: 4px;
+  margin: 0 auto;
 }
 
 #error {
@@ -30,4 +55,26 @@ canvas {
 
 input[type="file"] {
   cursor: pointer;
+}
+
+#controls {
+  margin-top: 16px;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  color: #a0a0a0;
+  width: 100%;
+}
+
+#controls td {
+  padding: 2px 8px;
+}
+
+#controls td:first-child {
+  color: #9ccc65;
+  text-align: right;
+  font-family: ui-monospace, monospace;
+}
+
+#controls td:last-child {
+  text-align: left;
 }

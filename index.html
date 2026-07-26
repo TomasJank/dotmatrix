@@ -12,7 +12,16 @@
       <h1>dotmatrix</h1>
       <p id="hint">Drop a Game Boy ROM (.gb) anywhere, or <label>choose a file<input type="file" id="rom" accept=".gb" hidden></label></p>
       <div id="error" hidden></div>
-      <canvas id="screen" width="160" height="144"></canvas>
+      <div class="bezel">
+        <canvas id="screen" width="160" height="144"></canvas>
+      </div>
+      <table id="controls">
+        <tr><td>Arrows</td><td>D-pad</td></tr>
+        <tr><td>X</td><td>A</td></tr>
+        <tr><td>Z</td><td>B</td></tr>
+        <tr><td>Enter</td><td>Start</td></tr>
+        <tr><td>Shift</td><td>Select</td></tr>
+      </table>
     </main>
     <script type="module" src="/src/main.ts"></script>
   </body>
