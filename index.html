@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>dotmatrix</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <main>
+      <h1>dotmatrix</h1>
+      <p id="hint">Drop a Game Boy ROM (.gb) anywhere, or <label>choose a file<input type="file" id="rom" accept=".gb" hidden></label></p>
+      <div id="error" hidden></div>
+      <canvas id="screen" width="160" height="144"></canvas>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
