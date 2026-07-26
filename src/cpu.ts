@@ -294,7 +294,23 @@ export class CPU {
     return z === 6 ? 16 : 8
   }
 
+  private static readonly VECTORS: Record<number, number> = { 0x01: 0x40, 0x02: 0x48, 0x04: 0x50, 0x08: 0x58, 0x10: 0x60 }
+
   step(): number {
+    const pending = this.bus.ie & this.bus.if_ & 0x1F
+    // any pending interrupt wakes HALT, even with IME off (halt bug not modeled — see below)
+    if (pending) this.halted = false
+    if (this.ime && pending) {
+      const bit = pending & -pending
+      this.ime = false
+      this.bus.if_ &= ~bit
+      this.push16(this.pc)
+      this.pc = CPU.VECTORS[bit]
+      return 20
+    }
+    if (this.halted) return 4
+
+    const wasImeNext = this.imeNext
     const pc = this.pc
     const op = this.fetch8()
     let cycles = CYCLES[op]
@@ -316,6 +332,7 @@ export class CPU {
 
     switch (op) {
       case 0x00: break // NOP
+      // ponytail: halt bug (IME=0, pending IRQ -> pc fails to advance on next fetch) skipped; add if a game depends on it
       case 0x76: this.halted = true; break // HALT
 
       case 0x01: this.bc = this.fetch16(); break
@@ -478,7 +495,7 @@ export class CPU {
       case 0xF8: this.hl = this.spPlusD8(); break
       case 0xF9: this.sp = this.hl; break
 
-      case 0xF3: this.ime = false; break // DI
+      case 0xF3: this.ime = false; this.imeNext = false; break // DI
       case 0xFB: this.imeNext = true; break // EI
 
       case 0xCB: cycles = this.execCB(); break
@@ -488,6 +505,7 @@ export class CPU {
     }
 
     this.f &= 0xF0
+    if (wasImeNext && this.imeNext) { this.ime = true; this.imeNext = false }
     return cycles
   }
 }
